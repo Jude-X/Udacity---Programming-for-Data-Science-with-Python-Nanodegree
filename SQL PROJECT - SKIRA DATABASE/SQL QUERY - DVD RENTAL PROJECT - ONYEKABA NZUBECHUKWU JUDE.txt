@@ -1,0 +1,100 @@
+
+/* Query 1 -  How many films rented was returned on time, early, or late and their total payments */
+
+WITH t1 AS (
+SELECT r.inventory_id, p.amount payment,
+DATE_PART('day', 
+r.return_date - r.rental_date) date_dif
+FROM rental r
+JOIN payment p
+ON r.rental_id = p.rental_id), 
+
+t2 AS (
+SELECT payment, t1.date_dif, f.rental_duration,
+CASE WHEN date_dif < rental_duration THEN 'Early Return'
+WHEN date_dif > rental_duration THEN 'Late Return'
+ELSE 'On-Time Return'
+END AS status 
+FROM film f
+JOIN inventory i
+ON f.film_id = i.film_id
+JOIN t1
+ON t1.inventory_id = i.inventory_id)
+
+SELECT Status, COUNT(*) Number, SUM(payment) Total
+FROM t2
+GROUP BY 1
+ORDER BY 2 DESC
+
+/* Query 2 - Top and Bottom 10 customers and their details*/
+
+     WITH t1 AS (
+     SELECT *
+     FROM payment p
+     JOIN customer c
+     ON p.customer_id = c.customer_id
+     JOIN address a
+     ON c.address_id = a.address_id
+     ), 
+     
+   t2 AS (
+   SELECT t1.first_name || ' ' || t1.last_name  Customer, SUM(t1.amount) Total_Payment, t1.address Address, t1.email Email, LOWER(LEFT(t1.first_name, 1)||''||RIGHT(t1.first_name, 1)||''||LEFT(t1.last_name,1) ||''||RIGHT(t1.last_name,1)||''||LENGTH(t1.first_name)||''||LENGTH(t1.last_name)) AS Password 
+   FROM t1
+   GROUP BY 1,3,4,5), 
+ 
+    t3 AS (
+    SELECT *, ROW_NUMBER() OVER (ORDER BY t2.Total_Payment DESC)  TopFive, ROW_NUMBER() OVER (ORDER BY t2.Total_Payment) BottomFive
+   FROM t2)
+   
+SELECT customer, total_payment, address, password
+FROM t3
+WHERE TopFive <= 10 or BottomFive <= 10
+
+
+/* Query 3 - Movie Distribution per Category by Quartile*/
+WITH t1 AS(
+           SELECT f.title, c.name , f.rental_duration, NTILE(4) OVER (ORDER BY f.rental_duration) AS standard_quartile
+           FROM film_category fc
+           JOIN category c
+           ON c.category_id = fc.category_id
+           JOIN film f
+           ON f.film_id = fc.film_id
+           GROUP BY 1, 2, 3
+           ORDER BY 1, 2) 
+SELECT t1.name, t1.standard_quartile, COUNT(t1.standard_quartile)
+FROM t1
+GROUP BY 1, 2
+ORDER BY 1, 2
+   
+   
+/ * Query 4 - Actors name in top 10 rented films*/ 
+WITH t1 AS (
+         SELECT * 
+         FROM inventory i
+         JOIN rental r 
+         ON i.inventory_id = r.inventory_id 
+         JOIN payment p
+         ON r.rental_id = p.rental_id 
+         JOIN film f
+         ON i.film_id = f.film_id 
+         JOIN film_actor fa
+         ON f.film_id = fa.film_id 
+         JOIN actor a
+         ON fa.actor_id = a.actor_id
+         ), 
+        
+    t2 AS( 
+        SELECT t1.first_name || '' ||t1.last_name Actor_Name, SUM(t1.amount) Total_Amount, COUNT(*) Number_of_Rents
+       FROM t1
+       GROUP BY 1
+              ), 
+    t3 AS (
+       SELECT *, ROW_NUMBER() OVER (ORDER BY t2.Total_Amount DESC) TopFive, ROW_NUMBER() OVER (ORDER BY t2. Total_Amount) BottomFive
+       FROM t2)
+SELECT Actor_Name, Total_Amount, Number_of_Rents
+FROM t3
+WHERE TopFive <= 10 OR BottomFive <= 10
+
+         
+   
+   
